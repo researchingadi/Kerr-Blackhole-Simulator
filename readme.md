@@ -27,12 +27,8 @@ The project is designed as an educational and research-inspired visualization sy
 
 <p align="center">
   <img src="Demo%20Pics/7.jpg" width="48%" />
-  <img src="Demo%20Pics/8.png" width="48%" />
 </p>
 
-<p align="center">
-  <img src="Demo%20Pics/9.png" width="48%" />
-</p>
 
 
 Recommended demo sequence:
