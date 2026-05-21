@@ -35,6 +35,16 @@ The project is designed as an educational and research-inspired visualization sy
   <img src="Demo%20Pics/10.png" width="48%" />
 </p>
 
+<p align="center">
+  <img src="Demo%20Pics/11.png" width="48%" />
+  <img src="Demo%20Pics/12.png" width="48%" />
+</p>
+
+<p align="center">
+  <img src="Demo%20Pics/13.png" width="48%" />
+  <img src="Demo%20Pics/14.png" width="48%" />
+</p>
+
 Recommended demo sequence:
 
 1. Start in **Gargantua Mode**
