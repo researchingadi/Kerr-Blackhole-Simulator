@@ -1,0 +1,385 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Black Hole Renderer v7 — Event Horizon Lab</title>
+  <style>
+    * { margin:0; padding:0; box-sizing:border-box; }
+    :root { color-scheme:dark; }
+    body { background:#000; overflow:hidden; font-family:'Courier New',ui-monospace,monospace; }
+    canvas { display:block; }
+
+    /* ── Loader ── */
+    #loader { position:fixed;inset:0;background:#000;z-index:100;display:flex;flex-direction:column;align-items:center;justify-content:center;transition:opacity 1.2s ease; }
+    #loader.out { opacity:0;pointer-events:none; }
+    #loader-title { color:rgba(255,255,255,.70);font-size:11px;letter-spacing:.42em;text-transform:uppercase;animation:pulse 1.2s step-end infinite; }
+    #loader-sub { color:rgba(255,255,255,.24);font-size:9px;letter-spacing:.28em;margin-top:10px; }
+    @keyframes pulse { 0%,100%{opacity:1}50%{opacity:.18} }
+
+    /* ── Canvas layers ── */
+    #particleCanvas {
+      position:fixed;inset:0;z-index:4;pointer-events:none;
+      mix-blend-mode:screen; /* glow particles over BH render */
+    }
+    #rayOverlay {
+      position:fixed;inset:0;z-index:5;pointer-events:none;
+      mix-blend-mode:screen;opacity:0;transition:opacity .45s ease;
+    }
+    #rayOverlay.on { opacity:1; }
+
+    /* ── HUD ── */
+    #hud { position:fixed;inset:0;pointer-events:none;opacity:0;transition:opacity 1.2s ease .45s;color:rgba(255,255,255,.38);font-size:10px;letter-spacing:.12em; }
+    #hud.on { opacity:1; }
+    #hud.hidden { opacity:0 !important; }
+
+    .c { position:absolute;width:16px;height:16px;border-color:rgba(255,255,255,.15);border-style:solid; }
+    .tl{top:16px;left:16px;border-width:1px 0 0 1px}.tr{top:16px;right:16px;border-width:1px 1px 0 0}
+    .bl{bottom:16px;left:16px;border-width:0 0 1px 1px}.br{bottom:16px;right:16px;border-width:0 1px 1px 0}
+
+    .scan { position:absolute;left:0;right:0;height:1px;background:linear-gradient(90deg,transparent,rgba(255,255,255,.04),transparent);animation:scan 12s linear infinite; }
+    @keyframes scan{ from{top:0%}to{top:100%} }
+
+    #xh { position:absolute;top:50%;left:50%;transform:translate(-50%,-50%);width:12px;height:12px; }
+    #xh::before,#xh::after { content:'';position:absolute;background:rgba(255,255,255,.10); }
+    #xh::before { width:1px;height:100%;left:50%;top:0; } #xh::after { height:1px;width:100%;top:50%;left:0; }
+
+    #title { position:absolute;top:28px;left:36px;line-height:1.8; }
+    #title h1 { font-size:12px;font-weight:normal;letter-spacing:.33em;text-transform:uppercase;color:rgba(255,255,255,.64); }
+    #title p  { font-size:9px;letter-spacing:.22em;color:rgba(255,255,255,.24);margin-top:2px; }
+    #directorLabel { margin-top:12px;color:rgba(120,190,255,.62);font-size:10px;letter-spacing:.20em;text-transform:uppercase;display:none; }
+    #directorLabel.on { display:block; }
+    #labStatus { margin-top:8px;color:rgba(255,205,95,.66);font-size:9px;letter-spacing:.19em;text-transform:uppercase;min-height:14px;transition:color .25s, text-shadow .25s; }
+    #labStatus.flash { color:rgba(160,225,255,.95);text-shadow:0 0 16px rgba(120,200,255,.65); }
+
+    /* ── Stats (left-bottom) ── */
+    #stats { position:absolute;bottom:28px;left:36px;line-height:2.15;color:rgba(255,255,255,.25); }
+    #stats span { color:rgba(255,255,255,.55); }
+
+    /* ── Physics live panel ── */
+    #physicsPanel {
+      position:absolute;bottom:28px;left:36px;
+      transform:translateY(-170px); /* sits above stats */
+      line-height:2.0;color:rgba(255,255,255,.22);
+    }
+    #physicsPanel span { color:rgba(120,200,255,.60); }
+    #physicsPanel .warn { color:rgba(255,120,60,.85) !important; }
+
+    /* ── Proximity gauge ── */
+    #proximityGauge {
+      position:absolute;bottom:220px;left:36px;
+      width:120px;
+    }
+    #proximityLabel { font-size:9px;letter-spacing:.20em;color:rgba(255,255,255,.20);margin-bottom:5px; }
+    #proximityBar {
+      width:100%;height:3px;background:rgba(255,255,255,.08);border-radius:2px;overflow:hidden;
+    }
+    #proximityFill {
+      height:100%;width:5%;background:rgba(100,200,255,.7);border-radius:2px;
+      transition:width .3s ease, background .3s ease;
+    }
+
+    #handle { position:absolute;bottom:28px;right:36px;font-size:11px;letter-spacing:.24em;color:rgba(255,255,255,.20); }
+    #hint { position:absolute;top:28px;right:36px;text-align:right;line-height:2.0;color:rgba(255,255,255,.18);font-size:9px;letter-spacing:.18em; }
+
+    /* ── Controls panel ── */
+    #controls {
+      position:fixed;right:24px;top:140px;z-index:20;width:310px;padding:14px;
+      background:rgba(4,6,14,.62);border:1px solid rgba(255,255,255,.13);border-radius:16px;
+      backdrop-filter:blur(15px);color:rgba(255,255,255,.68);box-shadow:0 24px 80px rgba(0,0,0,.42);
+      transition:opacity .35s ease, transform .35s ease;
+    }
+    #controls.collapsed { opacity:0;transform:translateX(20px);pointer-events:none; }
+    #controls h2 { font-size:10px;font-weight:400;letter-spacing:.30em;text-transform:uppercase;margin-bottom:12px;color:rgba(255,255,255,.64); }
+    .row { margin:10px 0; }
+    .row label { display:flex;justify-content:space-between;font-size:10px;letter-spacing:.14em;margin-bottom:4px;color:rgba(255,255,255,.46); }
+    input[type=range] { width:100%;accent-color:#9ecfff; }
+    .buttons { display:grid;grid-template-columns:1fr 1fr;gap:8px;margin:10px 0 12px; }
+    button {
+      cursor:pointer;background:rgba(255,255,255,.055);color:rgba(255,255,255,.58);
+      border:1px solid rgba(255,255,255,.11);border-radius:10px;padding:8px;
+      font-family:inherit;font-size:9px;letter-spacing:.14em;text-transform:uppercase;transition:all .2s;
+    }
+    button:hover { background:rgba(120,190,255,.11);color:rgba(255,255,255,.85);border-color:rgba(120,190,255,.25); }
+    button.active { background:rgba(120,190,255,.18);border-color:rgba(120,190,255,.45);color:rgba(200,230,255,.9); }
+    .mini { margin-top:10px;font-size:9px;line-height:1.6;color:rgba(255,255,255,.28);letter-spacing:.10em; }
+
+    /* ── Info card ── */
+    #infoCard {
+      position:fixed;left:36px;top:132px;z-index:20;width:340px;padding:14px;
+      background:rgba(4,6,14,.50);border:1px solid rgba(255,255,255,.10);border-radius:16px;
+      backdrop-filter:blur(14px);color:rgba(255,255,255,.50);font-size:10px;line-height:1.75;letter-spacing:.08em;
+      transition:opacity .35s ease, transform .35s ease;
+    }
+    #infoCard.hidden { opacity:0;transform:translateX(-20px);pointer-events:none; }
+    #infoCard h2 { font-size:10px;font-weight:400;letter-spacing:.28em;color:rgba(255,255,255,.66);margin-bottom:8px;text-transform:uppercase; }
+    #infoCard b { color:rgba(150,205,255,.72);font-weight:400; }
+
+    /* ── Tooltip ── */
+    #tooltip {
+      position:fixed;z-index:50;pointer-events:none;
+      padding:10px 14px;max-width:240px;
+      background:rgba(4,8,20,.78);border:1px solid rgba(120,190,255,.20);
+      border-radius:10px;backdrop-filter:blur(12px);
+      color:rgba(255,255,255,.70);font-size:9px;line-height:1.7;letter-spacing:.12em;
+      opacity:0;transition:opacity .2s ease;
+      box-shadow:0 8px 32px rgba(0,0,0,.5);
+    }
+    #tooltip.on { opacity:1; }
+    #tooltip b { color:rgba(140,210,255,.85);display:block;font-size:10px;letter-spacing:.22em;margin-bottom:4px;font-weight:400;text-transform:uppercase; }
+
+    /* ── Event horizon warning ── */
+    #horizonWarning {
+      position:fixed;inset:0;z-index:15;pointer-events:none;display:flex;align-items:center;justify-content:center;
+      opacity:0;transition:opacity .5s ease;
+    }
+    #horizonWarning.on { opacity:1; }
+    #horizonText {
+      font-size:11px;letter-spacing:.40em;text-transform:uppercase;
+      color:rgba(255,80,40,.85);text-align:center;line-height:2.2;
+      animation:horizonPulse 1.4s ease-in-out infinite;
+    }
+    @keyframes horizonPulse { 0%,100%{opacity:1} 50%{opacity:.35} }
+
+    /* ── GW mode indicator ── */
+    #gwIndicator {
+      position:absolute;top:90px;left:36px;
+      font-size:9px;letter-spacing:.22em;color:rgba(100,190,255,.55);
+      display:none;animation:gwPulse 2.0s ease-in-out infinite;
+    }
+    #gwIndicator.on { display:block; }
+    @keyframes gwPulse { 0%,100%{opacity:.55}50%{opacity:.20} }
+
+    /* ── Particle mode indicator ── */
+    #particleIndicator {
+      position:absolute;top:108px;left:36px;
+      font-size:9px;letter-spacing:.22em;color:rgba(255,180,80,.50);display:none;
+    }
+    #particleIndicator.on { display:block; }
+
+    
+    body.observatory #hud .scan { opacity:0.10; }
+    body.observatory #controls, body.observatory #infoCard { background:rgba(4,6,14,.42); border-color:rgba(255,255,255,.08); }
+    body.observatory #labStatus { color:rgba(190,220,255,.80); text-shadow:0 0 12px rgba(120,190,255,.18); }
+    body.observatory #title p, body.observatory #hint, body.observatory #handle { color:rgba(255,255,255,.16); }
+
+
+
+    #musicBadge {
+      position:fixed;right:36px;bottom:58px;z-index:31;
+      padding:8px 11px;border:1px solid rgba(255,255,255,.10);border-radius:999px;
+      background:rgba(3,5,12,.50);backdrop-filter:blur(12px);
+      color:rgba(255,230,170,.58);font-size:8px;letter-spacing:.22em;text-transform:uppercase;
+      opacity:0;pointer-events:none;transition:opacity .35s ease;
+    }
+    #musicBadge.on { opacity:1; }
+    #traverseBadge {
+      position:fixed;left:50%;bottom:58px;transform:translateX(-50%);z-index:31;
+      padding:8px 12px;border:1px solid rgba(255,255,255,.10);border-radius:999px;
+      background:rgba(5,7,14,.50);backdrop-filter:blur(12px);
+      color:rgba(255,178,120,.62);font-size:8px;letter-spacing:.22em;text-transform:uppercase;
+      opacity:0;pointer-events:none;transition:opacity .35s ease;
+    }
+    #traverseBadge.on { opacity:1; }
+
+
+    /* ── v9 Portfolio / telescope presentation ── */
+    #introCard {
+      position:fixed;left:50%;top:50%;transform:translate(-50%,-50%);
+      z-index:60;width:min(620px,calc(100vw - 40px));padding:24px 26px;
+      background:linear-gradient(180deg,rgba(6,8,16,.72),rgba(2,3,8,.50));
+      border:1px solid rgba(255,255,255,.11);border-radius:22px;
+      backdrop-filter:blur(18px);box-shadow:0 40px 120px rgba(0,0,0,.62);
+      color:rgba(255,255,255,.72);letter-spacing:.10em;line-height:1.8;
+      transition:opacity .55s ease, transform .55s ease;
+    }
+    #introCard.hidden { opacity:0;transform:translate(-50%,-45%);pointer-events:none; }
+    #introCard h2 { font-size:15px;font-weight:400;letter-spacing:.34em;text-transform:uppercase;color:rgba(255,255,255,.82);margin-bottom:10px; }
+    #introCard p { font-size:10px;color:rgba(255,255,255,.45);margin-bottom:14px; }
+    #introCard .introGrid { display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-top:12px; }
+    #introCard .introGrid div { padding:9px;border:1px solid rgba(255,255,255,.08);border-radius:12px;background:rgba(255,255,255,.035);font-size:9px;color:rgba(190,220,255,.62); }
+    #introCard button { margin-top:16px;width:100%; }
+    #captureBadge {
+      position:fixed;left:50%;bottom:28px;transform:translateX(-50%);
+      z-index:30;padding:9px 14px;border-radius:999px;border:1px solid rgba(255,255,255,.10);
+      background:rgba(2,4,10,.45);backdrop-filter:blur(12px);
+      color:rgba(220,235,255,.58);font-size:9px;letter-spacing:.24em;text-transform:uppercase;
+      opacity:0;pointer-events:none;transition:opacity .35s ease;
+    }
+    #captureBadge.on { opacity:1; }
+    body.beauty #hud, body.beauty #controls, body.beauty #infoCard, body.beauty #introCard { opacity:0!important;pointer-events:none!important; }
+    body.telescope #hud { opacity:.28; }
+    body.telescope #controls, body.telescope #infoCard { opacity:0;pointer-events:none; }
+
+    @media(max-width:760px){
+      #controls{width:calc(100vw - 32px);right:16px;left:16px;top:auto;bottom:18px;}
+      #infoCard,#physicsPanel,#proximityGauge{display:none;}
+      #title{left:24px;top:22px;} #hint{right:24px;top:22px;} #title h1{font-size:10px;letter-spacing:.24em;} #title p{display:none;}
+    }
+  </style>
+</head>
+<body>
+
+<div id="introCard">
+  <h2>Cloud Disk Mode</h2>
+  <p>Real-time WebGL black hole renderer with gravitational lensing, Doppler-shifted accretion flow, dense volumetric cloud layers, and optional cinematic organ/space ambience.</p>
+  <div class="introGrid">
+    <div>6 — cloud traverse</div>
+    <div>R/Z — height control</div>
+    <div>Cloud Density slider</div>
+    <div>N — cinematic score</div>
+    <div>Click — launch photon beam</div>
+    <div>Shift+Click — inject matter</div>
+  </div>
+  <button id="introStart">Enter Renderer</button>
+</div>
+<div id="captureBadge">Telescope Capture // Press T to exit</div>
+<div id="traverseBadge">Cloud Traverse // 6 to exit · R/Z height</div>
+<div id="musicBadge">Cinematic Score // N to mute</div>
+
+
+<div id="loader">
+  <div id="loader-title">Initializing Cloud Disk</div>
+  <div id="loader-sub">Cloud Disk · Layered Plasma Weather · Cinematic Score</div>
+</div>
+
+<!-- Particle orbit canvas (blend: screen) -->
+<canvas id="particleCanvas"></canvas>
+
+<!-- Photon paths + GW rings canvas -->
+<canvas id="rayOverlay"></canvas>
+
+<!-- Event horizon warning overlay -->
+<div id="horizonWarning">
+  <div id="horizonText">⚠ WARNING<br>APPROACHING EVENT HORIZON<br><span id="horizonDist">r = — rₛ</span></div>
+</div>
+
+<!-- Hover tooltip -->
+<div id="tooltip"><b id="ttTitle"></b><span id="ttBody"></span></div>
+
+<div id="hud">
+  <div class="scan"></div>
+  <div class="c tl"></div><div class="c tr"></div><div class="c bl"></div><div class="c br"></div>
+  <div id="xh"></div>
+
+  <div id="title">
+    <h1>Black Hole Renderer // Cloud Disk</h1>
+    <p>GLSL Black Hole Renderer · Cloud Disk · Layered Accretion Flow</p>
+    <div id="directorLabel">DIRECTOR MODE // SHOT 01</div>
+    <div id="labStatus">CLICK TO LAUNCH PHOTONS // 6 FOR CLOUD TRAVERSE</div>
+  </div>
+
+  <!-- Status indicators -->
+  <div id="gwIndicator">◈ GRAVITATIONAL WAVE MODE</div>
+  <div id="particleIndicator">◉ ORBITAL PARTICLES — SHIFT+CLICK TO FLARE</div>
+
+  <!-- Proximity gauge -->
+  <div id="proximityGauge">
+    <div id="proximityLabel">GRAVITY WELL DEPTH</div>
+    <div id="proximityBar"><div id="proximityFill"></div></div>
+  </div>
+
+  <!-- Live physics panel -->
+  <div id="physicsPanel">
+    <div>TIME DILATION &nbsp;<span id="hudTD">—</span></div>
+    <div>HAWKING T &nbsp;<span id="hudHawking">6.2 × 10⁻¹⁶ K</span></div>
+    <div>ISCO PERIOD &nbsp;<span id="hudPeriod">~70.6 min</span></div>
+    <div>FRAME DRAG Ω &nbsp;<span id="hudOmega">—</span></div>
+  </div>
+
+  <!-- Standard stats -->
+  <div id="stats">
+    <div>MODE &nbsp;<span id="hudMode">CINEMATIC</span></div>
+    <div>OBSERVER r &nbsp;<span id="hudDistance">—</span> rₛ</div>
+    <div>EST MIN APPROACH &nbsp;<span id="hudMinR">—</span> rₛ</div>
+    <div>DOPPLER RANGE &nbsp;<span id="hudDoppler">—</span></div>
+    <div>DISK TEMP &nbsp;<span id="hudTemp">—</span></div>
+    <div>QUALITY &nbsp;<span id="hudQuality">HIGH</span></div>
+    <div>PHOTON PATHS &nbsp;<span id="hudPhoton">OFF</span></div>
+    <div id="fps">FPS &nbsp;<span>—</span></div>
+  </div>
+
+  <div id="handle">kermitthedev</div>
+  <div id="hint">
+    DRAG orbit · SCROLL zoom<br>
+    CLICK photon beam · CTRL+CLICK ray fan<br>
+    SHIFT+CLICK inject matter<br>
+    M measurement · X split lensing<br>
+    A audio · ENTER mission mode<br>
+    6 cloud traverse · cloud density slider · N music · O observatory
+  </div>
+</div>
+
+<aside id="infoCard">
+  <h2>Cloud Disk Mode</h2>
+  <div><b>Interaction:</b> Click launches photon trajectories; Shift+Click injects matter into the accretion flow.</div>
+  <div><b>Physics:</b> Schwarzschild null-ray geodesic with Kerr frame dragging (Lense-Thirring).</div>
+  <div><b>Disk:</b> Blackbody T(r), relativistic Doppler δ=√(1-β²)/(1-β cosθ), beaming I∝δ³·⁴.</div>
+  <div><b>Particles:</b> Keplerian orbits ω∝r⁻³/², Doppler-colored. Click to add bursts.</div>
+  <div><b>Photon Lab:</b> Press P for null-ray paths; M shows horizon/photon-sphere/ISCO measurement rings.</div>
+  <div><b>Split Mode:</b> Press X to compare no-lensing vs full gravitational lensing in real time.</div>
+  <div><b>Mission:</b> Press Enter for a guided demo sequence with photon launch, disk flare, and final orbit.</div>
+  <div><b>Observatory:</b> Press O for documentary-style rendering with restrained bloom, volumetric disk haze, and subtle auto exposure.</div>
+  <div><b>Telescope:</b> Press T for a clean telescope-capture view with UI suppressed and realism tuned.</div>
+  <div><b>Score:</b> Press N for an original organ/space ambience, or L to load a local audio file you own.</div>
+  <div><b>Traverse:</b> Press 6 for a low-altitude glide above the disk with volumetric plasma haze, thicker cloud layers, and close-range detail.</div>
+</aside>
+
+<section id="controls">
+  <h2>Control Surface</h2>
+  <div class="buttons">
+    <button id="presetScientific">Scientific</button>
+    <button id="presetCinematic">Cinematic</button>
+    <button id="presetObservatory">Observatory</button>
+    <button id="telescopeBtn">Telescope</button>
+    <button id="traverseBtn">Cloud Traverse</button>
+    <button id="presetAnnihilation">Annihilation</button>
+    <button id="directorBtn">Director</button>
+    <button id="photonBtn">Photon Lab</button>
+    <button id="particleBtn">Particles</button>
+    <button id="gwBtn">Grav Waves</button>
+    <button id="fallingBtn">Infall Mode</button>
+    <button id="measureBtn">Measure</button>
+    <button id="splitBtn">Split Lens</button>
+    <button id="audioBtn">Hum</button>
+    <button id="musicBtn">Music</button>
+    <button id="loadMusicBtn">Load Track</button>
+    <button id="missionBtn">Mission</button>
+  </div>
+  <div class="row"><label>Lensing <span id="v-lensing">1.45</span></label><input id="lensing" type="range" min="0.4" max="2.7" step="0.01" value="1.45"></div>
+  <div class="row"><label>Disk Power <span id="v-disk">1.10</span></label><input id="disk" type="range" min="0.25" max="2.2" step="0.01" value="1.10"></div>
+  <div class="row"><label>Exposure <span id="v-exposure">1.08</span></label><input id="exposure" type="range" min="0.55" max="1.85" step="0.01" value="1.08"></div>
+  <div class="row"><label>Spin Warp <span id="v-spin">0.55</span></label><input id="spin" type="range" min="0.0" max="1.2" step="0.01" value="0.55"></div>
+  <div class="row"><label>Disk Tilt <span id="v-tilt">0.62</span></label><input id="tilt" type="range" min="-1.1" max="1.1" step="0.01" value="0.62"></div>
+  <div class="row"><label>Jet Power <span id="v-jet">0.06</span></label><input id="jet" type="range" min="0.0" max="1.25" step="0.01" value="0.06"></div>
+  <div class="row"><label>Ring Echo <span id="v-echo">0.78</span></label><input id="echo" type="range" min="0.2" max="1.35" step="0.01" value="0.78"></div>
+  <div class="row"><label>Disk Haze <span id="v-haze">0.60</span></label><input id="haze" type="range" min="0.0" max="1.25" step="0.01" value="0.60"></div>
+  <div class="row"><label>Lens Dirt <span id="v-dirt">0.05</span></label><input id="dirt" type="range" min="0.0" max="0.35" step="0.01" value="0.05"></div>
+  <div class="row"><label>Secondary Image <span id="v-secondary">0.58</span></label><input id="secondary" type="range" min="0.0" max="1.2" step="0.01" value="0.58"></div>
+  <div class="row"><label>Traverse Height <span id="v-traverse-height">0.15</span></label><input id="traverseHeight" type="range" min="0.04" max="0.40" step="0.01" value="0.15"></div>
+  <div class="row"><label>Cloud Density <span id="v-cloud-density">0.78</span></label><input id="cloudDensity" type="range" min="0.0" max="1.4" step="0.01" value="0.78"></div>
+  <div class="row"><label>Shadow Depth <span id="v-shadow">0.78</span></label><input id="shadow" type="range" min="0.0" max="1.0" step="0.01" value="0.78"></div>
+  <div class="row"><label>Ultra RGB <span id="v-ultra">0.00</span></label><input id="ultra" type="range" min="0.0" max="1.0" step="1" value="0"></div>
+  <div class="row"><label>Quality Steps <span id="v-quality">180</span></label><input id="quality" type="range" min="100" max="220" step="10" value="180"></div>
+  <input id="musicFile" type="file" accept="audio/*" style="display:none" />
+  <div class="mini">v12: cloud-layer disk, denser plasma haze, 6 cloud traverse, R/Z height, Observatory + Telescope + Beauty modes, music, photon beams, matter injection.</div>
+</section>
+
+<script type="module" src="/src/main.js"></script>
+<script>
+  window.addEventListener('load', () => {
+    setTimeout(() => {
+      document.getElementById('loader').classList.add('out');
+      document.getElementById('hud').classList.add('on');
+    }, 1000);
+  });
+
+  document.getElementById('introStart')?.addEventListener('click', () => {
+    document.getElementById('introCard')?.classList.add('hidden');
+  });
+  window.addEventListener('keydown', (e) => {
+    if (e.key.toLowerCase() === 'escape') document.getElementById('introCard')?.classList.add('hidden');
+  });
+</script>
+</body>
+</html>

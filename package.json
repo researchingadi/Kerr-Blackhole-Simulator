@@ -1,0 +1,49 @@
+{
+  "name": "black-hole-renderer-v12-cloud-disk",
+  "version": "12.0.0",
+  "description": "Black hole renderer with enhanced cloud-layer accretion disk inspired by cinematic astrophysics: dense volumetric plasma clouds, layered turbulence, and immersive low-altitude disk traverse.",
+  "type": "module",
+  "scripts": {
+    "dev": "vite",
+    "build": "vite build",
+    "preview": "vite preview"
+  },
+  "keywords": [
+    "black-hole",
+    "event-horizon-lab",
+    "threejs",
+    "webgl",
+    "glsl",
+    "raymarching",
+    "gravitational-lensing",
+    "photon-beams",
+    "accretion-disk",
+    "interactive-physics",
+    "shader",
+    "observatory-mode",
+    "hyper-realistic",
+    "documentary-render",
+    "astrophotography",
+    "telescope-mode",
+    "portfolio-demo",
+    "secondary-lensed-image",
+    "observatory-render",
+    "cinematic-score",
+    "web-audio",
+    "organ-pad",
+    "soundtrack",
+    "disk-traverse",
+    "volumetric-plasma",
+    "immersive-camera",
+    "cloud-disk",
+    "volumetric-clouds",
+    "cinematic-accretion-disk",
+    "v12"
+  ],
+  "dependencies": {
+    "three": "^0.165.0"
+  },
+  "devDependencies": {
+    "vite": "^5.2.0"
+  }
+}
