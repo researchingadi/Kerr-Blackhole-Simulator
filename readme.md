@@ -32,7 +32,6 @@ The project is designed as an educational and research-inspired visualization sy
 
 <p align="center">
   <img src="Demo%20Pics/9.png" width="48%" />
-  <img src="Demo%20Pics/10.png" width="48%" />
 </p>
 
 
