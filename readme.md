@@ -519,8 +519,8 @@ Rather than presenting black hole physics as a static animation or pre-rendered 
 Clone the repository:
 
 ```bash
-git clone https://github.com/YOUR_USERNAME/YOUR_REPO_NAME.git
-cd YOUR_REPO_NAME
+git clone https://github.com/researchingadi/Kerr-Blackhole-Simulator.git
+cd Kerr-Blackhole-Simulator
 ```
 
 Install dependencies:
